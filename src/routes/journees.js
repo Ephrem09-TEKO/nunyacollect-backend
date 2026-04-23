@@ -66,10 +66,22 @@ router.post('/terminer', auth, async (req, res) => {
 
     // Résumé de la journée
     const resume = await pool.query(`
-      SELECT COUNT(*) as total_clients,
-             SUM(montant_total) as total_montant
+      SELECT 
+    	COUNT(*) as total_clients,
+    	COALESCE(SUM(montant_total), 0) as total_montant
       FROM transactions
       WHERE journee_id = $1
+    `, [result.rows[0].id]);
+
+    const detailsClients = await pool.query(`
+      SELECT 
+    	c.nom as client_nom,
+    	COALESCE(SUM(t.montant_total), 0) as total_client
+      FROM transactions t
+      JOIN clients c ON c.id = t.client_id
+      WHERE t.journee_id = $1
+      GROUP BY c.nom
+      ORDER BY c.nom
     `, [result.rows[0].id]);
 
     res.json({
@@ -78,8 +90,9 @@ router.post('/terminer', auth, async (req, res) => {
       heure_debut: result.rows[0].heure_debut,
       heure_fin: result.rows[0].heure_fin,
       resume: {
-        total_clients: resume.rows[0].total_clients,
-        total_montant: resume.rows[0].total_montant || 0
+  	total_clients: resume.rows[0].total_clients,
+  	total_montant: resume.rows[0].total_montant || 0,
+  	details_clients: detailsClients.rows
       }
     });
 
