@@ -9,26 +9,62 @@ router.get('/mes-clients', auth, async (req, res) => {
   try {
     const collectriceId = req.collectrice.id;
 
-    const result = await pool.query(`
-      SELECT
-        c.id,
-        c.nom,
-        c.contact,
-        c.montant_journalier,
-        c.frequence_cotisation,
-        c.jours_cotisation,
-        CASE
-          WHEN t.id IS NOT NULL THEN 'collecte'
-          ELSE 'en_attente'
-        END AS statut_jour
-      FROM clients c
-      LEFT JOIN transactions t
-        ON t.client_id = c.id
-        AND DATE(t.heure) = CURRENT_DATE
-      WHERE c.collectrice_id = $1
-        AND c.statut = 'actif'
-      ORDER BY c.nom
+    // Chercher la journée en cours de cette collectrice
+    const journeeActive = await pool.query(`
+      SELECT id
+      FROM journees_collecte
+      WHERE collectrice_id = $1
+        AND statut = 'en_cours'
+      ORDER BY created_at DESC
+      LIMIT 1
     `, [collectriceId]);
+
+    let journeeId = null;
+    if (journeeActive.rows.length > 0) {
+      journeeId = journeeActive.rows[0].id;
+    }
+
+    let result;
+
+    if (journeeId) {
+      result = await pool.query(`
+        SELECT
+          c.id,
+          c.nom,
+          c.contact,
+          c.montant_journalier,
+          c.frequence_cotisation,
+          c.jours_cotisation,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM transactions t
+              WHERE t.client_id = c.id
+                AND t.journee_id = $2
+            ) THEN 'collecte'
+            ELSE 'en_attente'
+          END AS statut_jour
+        FROM clients c
+        WHERE c.collectrice_id = $1
+          AND c.statut = 'actif'
+        ORDER BY c.nom
+      `, [collectriceId, journeeId]);
+    } else {
+      result = await pool.query(`
+        SELECT
+          c.id,
+          c.nom,
+          c.contact,
+          c.montant_journalier,
+          c.frequence_cotisation,
+          c.jours_cotisation,
+          'en_attente' AS statut_jour
+        FROM clients c
+        WHERE c.collectrice_id = $1
+          AND c.statut = 'actif'
+        ORDER BY c.nom
+      `, [collectriceId]);
+    }
 
     res.json({
       collectrice: req.collectrice.nom + ' ' + req.collectrice.prenom,
