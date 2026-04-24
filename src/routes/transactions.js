@@ -80,4 +80,45 @@ router.get('/journee/:journee_id', auth, async (req, res) => {
   }
 });
 
+// GET /api/transactions (liste avec filtre date)
+router.get('/', auth, async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    let query = `
+      SELECT 
+        t.id,
+        t.heure,
+        t.gps_lieu,
+        t.semaine_courante_jours,
+        t.rattrapage,
+        t.montant_total,
+        t.type,
+        c.nom as client_nom,
+        j.date as journee_date
+      FROM transactions t
+      JOIN clients c ON c.id = t.client_id
+      JOIN journees_collecte j ON j.id = t.journee_id
+      WHERE j.collectrice_id = $1
+    `;
+
+    const params = [req.collectrice.id];
+
+    if (date) {
+      query += ` AND j.date = $2`;
+      params.push(date);
+    }
+
+    query += ` ORDER BY t.heure DESC`;
+
+    const result = await pool.query(query, params);
+
+    res.json({ transactions: result.rows });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;
