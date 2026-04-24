@@ -184,5 +184,43 @@ router.get('/:id/jours-manques', auth, async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur' });
   }
 });
+// GET /api/clients/dashboard/liste
+router.get('/dashboard/liste', auth, async (req, res) => {
+  try {
+    const collectriceId = req.collectrice.id;
+
+    const result = await pool.query(`
+      SELECT 
+        c.id,
+        c.nom,
+        c.contact,
+        c.montant_journalier,
+        c.frequence_cotisation,
+        c.jours_cotisation,
+        c.statut,
+        t.id as derniere_transaction_id,
+        t.heure as derniere_collecte_heure,
+        t.gps_lieu as derniere_collecte_gps,
+        t.montant_total as dernier_montant,
+        t.type as dernier_type
+      FROM clients c
+      LEFT JOIN LATERAL (
+        SELECT *
+        FROM transactions t
+        WHERE t.client_id = c.id
+        ORDER BY t.heure DESC
+        LIMIT 1
+      ) t ON true
+      WHERE c.collectrice_id = $1
+      ORDER BY c.nom
+    `, [collectriceId]);
+
+    res.json({ clients: result.rows });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
 
 module.exports = router;
