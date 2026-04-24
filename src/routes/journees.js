@@ -179,4 +179,48 @@ router.get('/dashboard/trajet', auth, async (req, res) => {
   }
 });
 
+// GET /api/journees/dashboard/trajet
+router.get('/dashboard/trajet', auth, async (req, res) => {
+  try {
+    const collectriceId = req.collectrice.id;
+
+    const journee = await pool.query(`
+      SELECT *
+      FROM journees_collecte
+      WHERE collectrice_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [collectriceId]);
+
+    if (journee.rows.length === 0) {
+      return res.json({ journee: null, transactions: [] });
+    }
+
+    const journeeId = journee.rows[0].id;
+
+    const transactions = await pool.query(`
+      SELECT 
+        t.id,
+        t.heure,
+        t.gps_lieu,
+        t.montant_total,
+        t.type,
+        c.nom as client_nom
+      FROM transactions t
+      JOIN clients c ON c.id = t.client_id
+      WHERE t.journee_id = $1
+      ORDER BY t.heure ASC
+    `, [journeeId]);
+
+    res.json({
+      journee: journee.rows[0],
+      transactions: transactions.rows
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;
